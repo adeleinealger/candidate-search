@@ -1,55 +1,69 @@
 import { useState, useEffect } from 'react';
+
 import { searchGithub, searchGithubUser } from '../api/API';
+import CandidateCard from '../components/CandidateCard';
+import type { Candidate } from '../interfaces/Candidate.interface';
+
+const initialCandidate: Candidate = {
+  id: null,
+  login: null,
+  email: null,
+  html_url: null,
+  name: null,
+  bio: null,
+  company: null,
+  location: null,
+  avatar_url: null,
+};
 
 const CandidateSearch = () => {
-  const [candidate, setCandidate] = useState<any>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [results, setResults] = useState<Candidate[]>([]);
+  const [currentUser, setCurrentUser] = useState<Candidate>(initialCandidate);
+  const [currentIdx, setCurrentIdx] = useState(0);
+
+  const searchForSpecificUser = async (user: string) => {
+    const data = await searchGithubUser(user);
+    setCurrentUser(data);
+  };
+
+  const searchForUsers = async () => {
+    const data = await searchGithub();
+    setResults(data);
+    if (data.length > 0) {
+      await searchForSpecificUser(data[0].login || '');
+    }
+  };
+
+  const makeDecision = async (isSelected: boolean) => {
+    if (isSelected) {
+      const savedCandidates = localStorage.getItem('savedCandidates');
+      const parsedCandidates: Candidate[] = savedCandidates ? JSON.parse(savedCandidates) : [];
+      parsedCandidates.push(currentUser);
+      localStorage.setItem('savedCandidates', JSON.stringify(parsedCandidates));
+    }
+    if (currentIdx + 1 < results.length) {
+      setCurrentIdx(currentIdx + 1);
+      await searchForSpecificUser(results[currentIdx + 1].login || '');
+    } else {
+      setCurrentIdx(0);
+      await searchForUsers();
+    }
+  };
 
   useEffect(() => {
-    const fetchCandidate = async () => {
-      try {
-        // Fetch a list of random users
-        const users = await searchGithub();
-        console.log(users)
-        if (users.length > 0) {
-          // Fetch detailed information for the first user
-          const userDetails = await searchGithubUser(users[0].login);
-          setCandidate(userDetails);
-        } else {
-          setError('No candidates found.');
-        }
-      } catch (err) {
-        setError('Failed to fetch candidate information.');
-      }
-    };
-
-    fetchCandidate();
+    searchForUsers();
+    // Only search for a specific user if login is present
+    if (currentUser.login) {
+      searchForSpecificUser(currentUser.login);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  if (error) {
-    return <div>Error: {error}</div>;
-  }
-
-  if (!candidate) {
-    return <div>Loading...</div>;
-  }
-
   return (
-    <div>
-      <h1>Candidate Information</h1>
-      <img src={candidate.avatar_url} alt={`${candidate.name}'s avatar`} width="150" />
-      <p><strong>Name:</strong> {candidate.name || 'N/A'}</p>
-      <p><strong>Username:</strong> {candidate.login}</p>
-      <p><strong>Location:</strong> {candidate.location || 'N/A'}</p>
-      <p><strong>Email:</strong> {candidate.email || 'N/A'}</p>
-      <p><strong>Company:</strong> {candidate.company || 'N/A'}</p>
-      <p>
-        <strong>GitHub Profile:</strong>{' '}
-        <a href={candidate.html_url} target="_blank" rel="noopener noreferrer">
-          {candidate.html_url}
-        </a>
-      </p>
-    </div>
+    <>
+      <h1>Candidate Search</h1>
+      <CandidateCard currentUser={currentUser} makeDecision={makeDecision} />
+    </>
   );
 };
 
